@@ -346,6 +346,8 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
 {
   // Compute the map->odom transform
   tf2::Stamped<tf2::Transform> odom_to_map;
+  tf2::Transform tf_odomF_baseF, tf_baseF_baseOrthoF, tf_baseOrthoF_baseF,
+      tf_odomF_mapF, tf_mapF_baseOrthoF, tf_baseOrthoF_mapF;
   tf2::Quaternion q(0.,0.,0.,1.0);
   q.setRPY(0., 0., corrected_pose.GetHeading());
   tf2::Stamped<tf2::Transform> base_to_map(
@@ -353,10 +355,27 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
     corrected_pose.GetY(), 0.0)).inverse(), t, base_frame_);
   try
   {
-    geometry_msgs::TransformStamped base_to_map_msg, odom_to_map_msg;
-    tf2::convert(base_to_map, base_to_map_msg);
-    odom_to_map_msg = tf_->transform(base_to_map_msg, odom_frame_);
-    tf2::convert(odom_to_map_msg, odom_to_map);
+//    geometry_msgs::TransformStamped base_to_map_msg, odom_to_map_msg;
+//    tf2::convert(base_to_map, base_to_map_msg);
+//    odom_to_map_msg = tf_->transform(base_to_map_msg, odom_frame_);
+//    tf2::convert(odom_to_map_msg, odom_to_map);
+
+    geometry_msgs::TransformStamped odom_to_base_msg;
+    odom_to_base_msg = tf_->lookupTransform(odom_frame_, base_frame_, t);
+    tf2::convert(odom_to_base_msg.transform, tf_odomF_baseF);
+    tf_mapF_baseOrthoF = tf2::Transform(q, tf2::Vector3(corrected_pose.GetX(),
+                                                        corrected_pose.GetY(), odom_to_base_msg.transform.translation.z));
+
+    double roll, pitch, yaw;
+    tf_odomF_baseF.getBasis().getRPY(roll, pitch, yaw);
+    tf_baseOrthoF_baseF.setOrigin(tf2::Vector3(0.0, 0.0, 0.0));
+    q.setRPY(roll, pitch, 0.0);
+    tf_baseOrthoF_baseF.setRotation(q);
+    tf_baseF_baseOrthoF = tf_baseOrthoF_baseF.inverse();
+
+    tf_baseOrthoF_mapF = tf_mapF_baseOrthoF.inverse();
+    tf_odomF_mapF = tf_odomF_baseF*tf_baseF_baseOrthoF*tf_baseOrthoF_mapF;
+    odom_to_map = tf2::Stamped<tf2::Transform>(tf_odomF_mapF, t, odom_frame_);
   }
   catch(tf2::TransformException& e)
   {
