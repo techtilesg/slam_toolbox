@@ -28,6 +28,7 @@ MapSaver::MapSaver(ros::NodeHandle & nh, const std::string& map_name)
 {
   server_ = nh_.advertiseService("save_map", &MapSaver::saveMapCallback, this);
   sub_ = nh_.subscribe(map_name_, 1, &MapSaver::mapCallback, this);
+  map_topic_name_ = nh_.getNamespace() + "/" + map_name_;
 }
 
 /*****************************************************************************/
@@ -53,8 +54,8 @@ bool MapSaver::saveMapCallback(
   const std::string name = req.name.data;
   if (name != "")
   {
-    ROS_INFO("SlamToolbox: Saving map as %s.", name.c_str());
-    int rc = system(("rosrun map_server map_saver -f " + name).c_str());
+    ROS_INFO("SlamToolbox: Saving map as %s. from topic %s", name.c_str(), map_topic_name_.c_str());
+    int rc = system(("rosrun map_server map_saver -f " + name + " map:=" + map_topic_name_).c_str());
   }
   else
   {
