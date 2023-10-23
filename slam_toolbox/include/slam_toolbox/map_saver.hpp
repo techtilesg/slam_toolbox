@@ -41,8 +41,9 @@ private:
   ros::NodeHandle nh_;
   ros::ServiceServer server_;
   ros::Subscriber sub_;
-  std::string service_name_, map_name_;
+  std::string service_name_, map_name_, map_topic_name_;
   bool received_map_;
+
 };
 
 } // end namespace
