@@ -38,6 +38,8 @@ LoopClosureAssistant::LoopClosureAssistant(
     &LoopClosureAssistant::clearChangesCallback, this);
   ssLoopClosure_ = node.advertiseService("manual_loop_closure",
     &LoopClosureAssistant::manualLoopClosureCallback, this);
+  ssSetLoopSearchMaximumDistance_ = node.advertiseService("set_loop_search_maximum_distance",
+    &LoopClosureAssistant::setLoopSearchMaximumDistance, this);
   scan_publisher_ = node.advertise<sensor_msgs::LaserScan>(
     "karto_scan_visualization",10);
   solver_ = mapper_->getScanSolver();
@@ -282,6 +284,24 @@ bool LoopClosureAssistant::manualLoopClosureCallback(
   // update visualization and clear out nodes completed
   publishGraph();  
   clearMovedNodes();
+  return true;
+}
+
+/*****************************************************************************/
+bool LoopClosureAssistant::setLoopSearchMaximumDistance(
+  slam_toolbox_msgs::SetLoopSearchMaximumDistance::Request  &req,
+  slam_toolbox_msgs::SetLoopSearchMaximumDistance::Response &resp)
+/*****************************************************************************/
+{
+  ROS_INFO("setLoopSearchMaximumDistance: (%f)", req.loop_search_maximum_distance);
+  //Need mutex here?
+  mapper_->setParamLoopSearchMaximumDistance(req.loop_search_maximum_distance);
+  resp.loop_search_maximum_distance = mapper_->getParamLoopSearchMaximumDistance();
+  if (resp.loop_search_maximum_distance == req.loop_search_maximum_distance) {
+    resp.success = true;
+  }
+  else
+    resp.success = false;
   return true;
 }
 

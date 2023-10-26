@@ -40,5 +40,5 @@
 #include "slam_toolbox_msgs/DeserializePoseGraph.h"
 #include "slam_toolbox_msgs/MergeMaps.h"
 #include "slam_toolbox_msgs/AddSubmap.h"
-
+#include "slam_toolbox_msgs/SetLoopSearchMaximumDistance.h"
 #endif //SLAM_TOOLBOX_TOOLBOX_MSGS_H_

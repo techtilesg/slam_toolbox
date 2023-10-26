@@ -55,11 +55,12 @@ private:
   bool interactiveModeCallback(slam_toolbox_msgs::ToggleInteractive::Request  &req, slam_toolbox_msgs::ToggleInteractive::Response &resp);
   void moveNode(const int& id, const Eigen::Vector3d& pose);
   void addMovedNodes(const int& id, Eigen::Vector3d vec);
+  bool setLoopSearchMaximumDistance(slam_toolbox_msgs::SetLoopSearchMaximumDistance::Request& req, slam_toolbox_msgs::SetLoopSearchMaximumDistance::Response& resp);
 
   std::unique_ptr<tf2_ros::TransformBroadcaster> tfB_;
   laser_utils::ScanHolder* scan_holder_;
   ros::Publisher scan_publisher_, marker_publisher_;
-  ros::ServiceServer ssClear_manual_, ssLoopClosure_, ssInteractive_;
+  ros::ServiceServer ssClear_manual_, ssLoopClosure_, ssInteractive_, ssSetLoopSearchMaximumDistance_;
   boost::mutex moved_nodes_mutex_;
   std::map<int, Eigen::Vector3d> moved_nodes_;
   karto::Mapper* mapper_;
