@@ -33,6 +33,8 @@ CeresSolver::CeresSolver() :
   nh.getParam("mode", mode);
   nh.getParam("debug_logging", debug_logging_);
 
+  debug_pub_ = nh.advertise<std_msgs::Int8>("debug", 10);
+
   corrections_.clear();
   first_node_ = nodes_->end();
 
@@ -203,6 +205,9 @@ void CeresSolver::Compute()
   {
     ROS_WARN("CeresSolver: "
       "Ceres could not find a usable solution to optimize.");
+    std_msgs::Int8 debug_msg;
+    debug_msg.data = 1;
+    debug_pub_.publish(debug_msg);
     return;
   }
 
