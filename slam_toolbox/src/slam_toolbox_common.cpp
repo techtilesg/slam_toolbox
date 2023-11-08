@@ -176,12 +176,15 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
   {
     {
       boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-      geometry_msgs::TransformStamped msg;
-      tf2::convert(map_to_odom_, msg.transform);
-      msg.child_frame_id = odom_frame_;
-      msg.header.frame_id = map_frame_;
-      msg.header.stamp = ros::Time::now() + transform_timeout_;
-      tfB_->sendTransform(msg);
+      if(scan_header_.stamp.toSec() > 0.0 && !scan_header_.frame_id.empty()) {
+        geometry_msgs::TransformStamped msg;
+        tf2::convert(map_to_odom_, msg.transform);
+        msg.child_frame_id = odom_frame_;
+        msg.header.frame_id = map_frame_;
+        //TODO: why transform_timeout_ is here?
+        msg.header.stamp = scan_header_.stamp + transform_timeout_;
+        tfB_->sendTransform(msg);
+      }
     }
     r.sleep();
   }
@@ -327,7 +330,7 @@ bool SlamToolbox::updateMap()
   vis_utils::toNavMap(occ_grid, map_.map);
 
   // publish map as current
-  map_.map.header.stamp = ros::Time::now();
+  map_.map.header.stamp = scan_header_.stamp;
   sst_.publish(map_.map);
   sstm_.publish(map_.map.info);
   

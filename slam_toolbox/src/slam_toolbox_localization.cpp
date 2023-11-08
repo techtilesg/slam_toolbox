@@ -104,6 +104,7 @@ void LocalizationSlamToolbox::laserCallback(
   const sensor_msgs::LaserScan::ConstPtr& scan)
 /*****************************************************************************/
 {
+  scan_header_ = scan->header;
   // no odom info
   Pose2 pose;
   if(!pose_helper_->getOdomPose(pose, scan->header.stamp))
