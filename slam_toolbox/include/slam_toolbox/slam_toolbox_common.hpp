@@ -113,6 +113,7 @@ protected:
   std::string odom_frame_, map_frame_, base_frame_, map_name_, scan_topic_;
   ros::Duration transform_timeout_, tf_buffer_dur_, minimum_time_interval_;
   int throttle_scans_;
+  std_msgs::Header scan_header_;
 
   double resolution_;
   double position_covariance_scale_;
