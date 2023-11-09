@@ -176,13 +176,23 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
   {
     {
       boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-      if(scan_header_.stamp.toSec() > 0.0 && !scan_header_.frame_id.empty()) {
+      if(map_to_odom_stamp_.toSec() > 0.0) {
+        ros::Time current_t = ros::Time::now();
+        if(map_to_odom_updated_) {
+          map_to_odom_updated_ = false;
+          elapsed_from_last_tf_ = ros::Duration(0.0);
+        }
+        else {
+          elapsed_from_last_tf_ = current_t - map_to_odom_stamp_current_t_;
+        }
+
         geometry_msgs::TransformStamped msg;
         tf2::convert(map_to_odom_, msg.transform);
         msg.child_frame_id = odom_frame_;
         msg.header.frame_id = map_frame_;
-        //TODO: why transform_timeout_ is here?
-        msg.header.stamp = scan_header_.stamp + transform_timeout_;
+        //TODO: why transform_timeout_ is here? forward the transform to the future!
+        // to avoid ExtrapolationExceptions from other nodes
+        msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf_ + transform_timeout_;
         tfB_->sendTransform(msg);
       }
     }
@@ -330,7 +340,7 @@ bool SlamToolbox::updateMap()
   vis_utils::toNavMap(occ_grid, map_.map);
 
   // publish map as current
-  map_.map.header.stamp = scan_header_.stamp;
+  map_.map.header.stamp = map_to_odom_stamp_;
   sst_.publish(map_.map);
   sstm_.publish(map_.map.info);
   
@@ -405,6 +415,8 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
   boost::mutex::scoped_lock lock(map_to_odom_mutex_);
   map_to_odom_ = tf2::Transform(tf2::Quaternion( odom_to_map.getRotation() ),
     tf2::Vector3( odom_to_map.getOrigin() ) ).inverse();
+  map_to_odom_stamp_ = t;
+  map_to_odom_stamp_current_t_ = last_scan_stamp_;// ros::Time::now();
 
   return odom_to_map;
 }

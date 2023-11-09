@@ -69,7 +69,7 @@ void LifelongSlamToolbox::laserCallback(
   const sensor_msgs::LaserScan::ConstPtr& scan)
 /*****************************************************************************/
 {
-  scan_header_ = scan->header;
+  last_scan_stamp_ = ros::Time::now();
   // no odom info
   Pose2 pose;
   if(!pose_helper_->getOdomPose(pose, scan->header.stamp))
