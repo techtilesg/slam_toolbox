@@ -104,7 +104,11 @@ void LocalizationSlamToolbox::laserCallback(
   const sensor_msgs::LaserScan::ConstPtr& scan)
 /*****************************************************************************/
 {
-  last_scan_stamp_ = ros::Time::now();
+  {
+    boost::mutex::scoped_lock lock(last_scan_mutex_);
+    last_scan_stamp_ = ros::Time::now();
+    last_scan_header_ = scan->header;
+  }
   // no odom info
   Pose2 pose;
   if(!pose_helper_->getOdomPose(pose, scan->header.stamp))

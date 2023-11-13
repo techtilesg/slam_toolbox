@@ -125,6 +125,8 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   tf_buffer_dur_ = ros::Duration(tmp_val);
   private_nh.param("minimum_time_interval", tmp_val, 0.5);
   minimum_time_interval_ = ros::Duration(tmp_val);
+  private_nh.param("scan_update_tolerance", tmp_val, 1.0);
+  scan_update_tolerance_ = ros::Duration(tmp_val);
 
   private_nh.param("position_covariance_scale", position_covariance_scale_, 1.0);
   private_nh.param("yaw_covariance_scale", yaw_covariance_scale_, 1.0);
@@ -172,18 +174,35 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
   }
 
   ros::Rate r(1.0 / transform_publish_period);
+  ros::Time last_scan_stamp;
+  std_msgs::Header last_scan_header;
+  
   while(ros::ok())
   {
-    {
+    if (publish_tf_initialized_) {
+      {
+        boost::mutex::scoped_lock lock(last_scan_mutex_);
+        last_scan_stamp = last_scan_stamp_;
+        last_scan_header = last_scan_header_;
+      }
+      ros::Time current_t = ros::Time::now();
+      ros::Duration elapsed_from_last_scan = current_t - last_scan_stamp;
       boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-      if(map_to_odom_stamp_.toSec() > 0.0) {
-        ros::Time current_t = ros::Time::now();
+      if (elapsed_from_last_scan > scan_update_tolerance_) {
+        ROS_ERROR_THROTTLE(1.0, "publishTransformLoop: scan is not updated for (%f s) with tolerance (%f s)", 
+          elapsed_from_last_scan.toSec(), scan_update_tolerance_.toSec());
+        // publish_tf_initialized_ = false; // then robot is not moving, this one is never set
+        map_to_odom_stamp_current_t_ = last_scan_stamp;
+        map_to_odom_stamp_ = last_scan_header.stamp;
+      }
+      else {
+        ros::Duration elapsed_from_last_tf;
         if(map_to_odom_updated_) {
           map_to_odom_updated_ = false;
-          elapsed_from_last_tf_ = ros::Duration(0.0);
+          elapsed_from_last_tf = ros::Duration(0.0);
         }
         else {
-          elapsed_from_last_tf_ = current_t - map_to_odom_stamp_current_t_;
+          elapsed_from_last_tf = current_t - map_to_odom_stamp_current_t_;
         }
 
         geometry_msgs::TransformStamped msg;
@@ -192,7 +211,7 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
         msg.header.frame_id = map_frame_;
         //TODO: why transform_timeout_ is here? forward the transform to the future!
         // to avoid ExtrapolationExceptions from other nodes
-        msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf_ + transform_timeout_;
+        msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf + transform_timeout_;
         tfB_->sendTransform(msg);
       }
     }
@@ -416,7 +435,9 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
   map_to_odom_ = tf2::Transform(tf2::Quaternion( odom_to_map.getRotation() ),
     tf2::Vector3( odom_to_map.getOrigin() ) ).inverse();
   map_to_odom_stamp_ = t;
-  map_to_odom_stamp_current_t_ = last_scan_stamp_;// ros::Time::now();
+  map_to_odom_stamp_current_t_ = last_scan_stamp_;// ros::Time::now();W
+  map_to_odom_updated_ = true;
+  publish_tf_initialized_ = true;
 
   return odom_to_map;
 }
@@ -460,6 +481,7 @@ bool SlamToolbox::shouldProcessScan(
   // we give it a pass on the first measurement to get the ball rolling
   if (first_measurement_)
   {
+    // ROS_INFO("shouldProcessScan:first_measurement");
     last_scan_time = scan->header.stamp;
     last_pose = pose;
     first_measurement_ = false;
@@ -469,18 +491,21 @@ bool SlamToolbox::shouldProcessScan(
   // we are in a paused mode, reject incomming information
   if(isPaused(NEW_MEASUREMENTS))
   {
+    // ROS_INFO("shouldProcessScan:isPaused");
     return false;
   }
 
   // throttled out
   if ((scan->header.seq % throttle_scans_) != 0)
   {
+    // ROS_INFO("shouldProcessScan:throttled (%d, %d)",scan->header.seq ,throttle_scans_ );
     return false;
   }
 
   // not enough time
   if (scan->header.stamp - last_scan_time < minimum_time_interval_)
   {
+    // ROS_INFO("shouldProcessScan: not enough time (%f, %f)", scan->header.stamp.toSec(), last_scan_time.toSec());
     return false;
   }
 
@@ -488,6 +513,7 @@ bool SlamToolbox::shouldProcessScan(
   const double dist2 = last_pose.SquaredDistance(pose);
   if(dist2 < 0.8 * min_dist2 || scan->header.seq < 5)
   {
+    // ROS_INFO("shouldProcessScan: check moved enough (%f, %f) %d", dist2, 0.8 * min_dist2, scan->header.seq);
     return false;
   }
 
