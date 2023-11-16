@@ -179,7 +179,7 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
   
   while(ros::ok())
   {
-    if (publish_tf_initialized_) {
+    if (map_to_odom_initialized_) {
       {
         boost::mutex::scoped_lock lock(last_scan_mutex_);
         last_scan_stamp = last_scan_stamp_;
@@ -192,10 +192,15 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
         ROS_ERROR_THROTTLE(1.0, "publishTransformLoop: scan is not updated for (%f s) with tolerance (%f s)", 
           elapsed_from_last_scan.toSec(), scan_update_tolerance_.toSec());
         // publish_tf_initialized_ = false; // then robot is not moving, this one is never set
-        map_to_odom_stamp_current_t_ = last_scan_stamp;
-        map_to_odom_stamp_ = last_scan_header.stamp;
+        publish_tf_initialized_ = false;
       }
       else {
+        if(!publish_tf_initialized_) {
+          publish_tf_initialized_ = true;
+          map_to_odom_stamp_current_t_ = last_scan_stamp;
+          map_to_odom_stamp_ = last_scan_header.stamp;
+        }
+
         ros::Duration elapsed_from_last_tf;
         if(map_to_odom_updated_) {
           map_to_odom_updated_ = false;
@@ -437,6 +442,7 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
   map_to_odom_stamp_ = t;
   map_to_odom_stamp_current_t_ = last_scan_stamp_;// ros::Time::now();W
   map_to_odom_updated_ = true;
+  map_to_odom_initialized_ = true;
   publish_tf_initialized_ = true;
 
   return odom_to_map;

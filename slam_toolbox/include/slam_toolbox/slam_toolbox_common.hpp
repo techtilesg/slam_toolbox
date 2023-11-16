@@ -120,6 +120,7 @@ protected:
   ros::Time map_to_odom_stamp_current_t_; //scan that used for slam
   ros::Time map_to_odom_stamp_;
   bool publish_tf_initialized_{false};
+  bool map_to_odom_initialized_{false};
   // ros::Duration elapsed_from_last_tf_;
   ros::Duration scan_update_tolerance_; //for stop update tf if scan data does not updated
   bool map_to_odom_updated_{false};
