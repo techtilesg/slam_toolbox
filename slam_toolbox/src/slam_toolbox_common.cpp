@@ -830,6 +830,47 @@ bool SlamToolbox::deserializePoseGraphCallback(
   }
   ROS_DEBUG("DeserializePoseGraph: Successfully read file.");
 
+  //load data to the scanholder for interraction mode
+  if(enable_interactive_mode_) {
+    sensor_msgs::LaserScan msg;
+    karto::LaserRangeFinder* scan_info = dataset->GetLasers().at(0); //
+    msg.angle_increment = scan_info->GetAngularResolution();
+    msg.angle_max = scan_info->GetMaximumAngle();
+    msg.angle_min = scan_info->GetMinimumAngle();
+    msg.range_min = scan_info->GetMinimumRange();
+    msg.range_max = scan_info->GetMaximumRange();
+    int num_rays = scan_info->GetNumberOfRangeReadings();
+
+    karto::LocalizedRangeScan *range_scan;
+    for (auto iter = dataset->GetData().begin(); iter != dataset->GetData().end(); ++iter)
+    {
+      if(iter->second)
+      {
+        range_scan = iter->second;
+        karto::Pose2 pose = range_scan->GetCorrectedPose();
+        double angle;
+        karto::Vector2<double> p;
+        karto::PointVectorDouble ps = range_scan->GetPointReadings();
+        msg.ranges.clear();
+        double range, cos_a, sin_a;
+
+        for (int i = 0; i < num_rays; i++)
+        {
+          angle = (pose.GetHeading() + msg.angle_min + i * msg.angle_increment);
+          cos_a = cos(angle);
+          sin_a = sin(angle);
+          if (abs(cos_a) < 0.01) {
+            range = (ps.at(i).GetY() - pose.GetY())/sin_a;
+          }
+          else {
+            range = (ps.at(i).GetX() - pose.GetX())/cos_a;
+          }
+          msg.ranges.push_back(range);
+        }
+        scan_holder_->addScan(msg);
+      }
+    }
+  }
   loadSerializedPoseGraph(mapper, dataset);
   updateMap();
 
