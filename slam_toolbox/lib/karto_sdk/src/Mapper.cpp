@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
+#include <ros/ros.h>
 #include <sstream>
 #include <fstream>
 #include <stdexcept>
@@ -600,7 +600,7 @@ namespace karto
       if (math::DoubleEqual(bestResponse, 0.0))
       {
 #ifdef KARTO_DEBUG
-        std::cout << "Mapper Info: Expanding response search space!" << std::endl;
+        ROS_DEBUG("Mapper Info: Expanding response search space!");
 #endif
         // try and increase search angle offset with 20 degrees and do another match
         kt_double newSearchAngleOffset = m_pMapper->m_pCoarseSearchAngleOffset->GetValue();
@@ -621,7 +621,7 @@ namespace karto
 #ifdef KARTO_DEBUG
         if (math::DoubleEqual(bestResponse, 0.0))
         {
-          std::cout << "Mapper Warning: Unable to calculate response!" << std::endl;
+          ROS_DEBUG("Mapper Warning: Unable to calculate response!");
         }
 #endif
       }
@@ -638,8 +638,8 @@ namespace karto
     }
 
 #ifdef KARTO_DEBUG
-    std::cout << "  BEST POSE = " << rMean << " BEST RESPONSE = " << bestResponse << ",  VARIANCE = "
-              << rCovariance(0, 0) << ", " << rCovariance(1, 1) << std::endl;
+   ROS_DEBUG_STREAM("  BEST POSE = " << rMean << " BEST RESPONSE = " << bestResponse << ",  VARIANCE = "
+              << rCovariance(0, 0) << ", " << rCovariance(1, 1) );
 #endif
     assert(math::InRange(rMean.GetHeading(), -KT_PI, KT_PI));
 
@@ -848,8 +848,8 @@ namespace karto
     m_pPoseResponse = nullptr;
 
 #ifdef KARTO_DEBUG
-    std::cout << "bestPose: " << averagePose << std::endl;
-    std::cout << "bestResponse: " << bestResponse << std::endl;
+    ROS_DEBUG_STREAM("bestPose: " << averagePose);
+    ROS_DEBUG_STREAM("bestResponse: " << bestResponse);
 #endif
 
     if (!doingFineMatch)
@@ -866,7 +866,7 @@ namespace karto
     rMean = averagePose;
 
 #ifdef KARTO_DEBUG
-    std::cout << "bestPose: " << averagePose << std::endl;
+    ROS_DEBUG_STREAM("bestPose: " << averagePose);
 #endif
 
     if (bestResponse > 1.0)

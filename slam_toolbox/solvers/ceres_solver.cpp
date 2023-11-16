@@ -198,7 +198,8 @@ void CeresSolver::Compute()
   ceres::Solve(options_, problem_, &summary);
   if (debug_logging_)
   {
-    std::cout << summary.FullReport() << '\n';
+    // std::cout << summary.FullReport() << '\n';
+    ROS_DEBUG_STREAM("CeresSolver: " << summary.FullReport());
   }
 
   if (!summary.IsSolutionUsable())
