@@ -164,13 +164,14 @@ void LoopClosureAssistant::publishGraph()
   clear.action = visualization_msgs::Marker::DELETEALL;
   marray.markers.push_back(clear);
 
-  visualization_msgs::Marker m = vis_utils::toVertexMarker(map_frame_, "slam_toolbox", 0.1);
+  visualization_msgs::Marker m = vis_utils::toVertexMarker(map_frame_, "vertex", 0.1);
 
   // add map nodes
   for (const auto & sensor_name : vertices) {
     for (const auto & vertex : sensor_name.second) {
       m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
       m.color.a = vertex.first < first_localization_id ? 0.7 : 1.0;
+      m.ns = vertex.first < first_localization_id ? "vertex" : "loc_vertex";
       const auto & pose = vertex.second->GetObject()->GetCorrectedPose();
       m.id = vertex.first;
       m.pose.position.x = pose.GetX();
@@ -194,7 +195,7 @@ void LoopClosureAssistant::publishGraph()
   edges_marker.header.frame_id = map_frame_;
   edges_marker.header.stamp = ros::Time::now();
   edges_marker.id = 0;
-  edges_marker.ns = "slam_toolbox_edges";
+  edges_marker.ns = "map_edges";
   edges_marker.action = visualization_msgs::Marker::ADD;
   edges_marker.type = visualization_msgs::Marker::LINE_LIST;
   edges_marker.pose.orientation.w = 1;
@@ -208,7 +209,7 @@ void LoopClosureAssistant::publishGraph()
   localization_edges_marker.header.frame_id = map_frame_;
   localization_edges_marker.header.stamp = ros::Time::now();
   localization_edges_marker.id = 1;
-  localization_edges_marker.ns = "slam_toolbox_edges";
+  localization_edges_marker.ns = "loc_edges";
   localization_edges_marker.action = visualization_msgs::Marker::ADD;
   localization_edges_marker.type = visualization_msgs::Marker::LINE_LIST;
   localization_edges_marker.pose.orientation.w = 1;
