@@ -41,7 +41,7 @@ namespace karto
 {
 
   // enable this for verbose debug information
-  #define KARTO_DEBUG
+//  #define KARTO_DEBUG
 
   #define MAX_VARIANCE            500.0
   #define DISTANCE_PENALTY_GAIN   0.2
@@ -1564,6 +1564,7 @@ namespace karto
              << " (< " << m_pMapper->m_pLoopMatchMaximumVarianceCoarse->GetValue() << ")";
 
       m_pMapper->FireLoopClosureCheck(stream.str());
+      ROS_INFO("TryCloseLoop: %s", stream.str().c_str());
 
       if ((coarseResponse > m_pMapper->m_pLoopMatchMinimumResponseCoarse->GetValue()) &&
           (covariance(0, 0) < m_pMapper->m_pLoopMatchMaximumVarianceCoarse->GetValue()) &&
@@ -1582,20 +1583,24 @@ namespace karto
         stream1 << "FINE RESPONSE: " << fineResponse << " (>"
                 << m_pMapper->m_pLoopMatchMinimumResponseFine->GetValue() << ")" << std::endl;
         m_pMapper->FireLoopClosureCheck(stream1.str());
+        ROS_INFO("TryCloseLoop: %s", stream1.str().c_str());
 
         if (fineResponse < m_pMapper->m_pLoopMatchMinimumResponseFine->GetValue())
         {
           m_pMapper->FireLoopClosureCheck("REJECTED!");
+          ROS_INFO("TryCloseLoop: REJECTED!");
         }
         else
         {
           m_pMapper->FireBeginLoopClosure("Closing loop...");
+          ROS_INFO("TryCloseLoop: Closing loop...");
 
           pScan->SetSensorPose(bestPose);
           LinkChainToScan(candidateChain, pScan, bestPose, covariance);
           CorrectPoses();
 
           m_pMapper->FireEndLoopClosure("Loop closed!");
+          ROS_INFO("TryCloseLoop: Loop closed!");
 
           loopClosed = true;
         }
@@ -2886,8 +2891,10 @@ namespace karto
 
   kt_bool Mapper::ProcessLocalization(LocalizedRangeScan * pScan, Matrix3 * covariance)
   {
+    ros::WallTime tic = ros::WallTime::now(), toc, start = tic;
     if (pScan == NULL)
     {
+      ROS_DEBUG("ProcessLocalization: s1");
       return false;
     }
 
@@ -2897,6 +2904,7 @@ namespace karto
     if (pLaserRangeFinder == NULL || pScan == NULL ||
       pLaserRangeFinder->Validate(pScan) == false)
     {
+      ROS_DEBUG("ProcessLocalization: s2");
       return false;
     }
 
@@ -2923,6 +2931,7 @@ namespace karto
     // or if heading is larger then minimum heading
     if (!HasMovedEnough(pScan, pLastScan))
     {
+      ROS_DEBUG("ProcessLocalization: s3");
       return false;
     }
 
@@ -2941,6 +2950,9 @@ namespace karto
       if (covariance) {
         *covariance = cov;
       }
+      toc = ros::WallTime::now();
+      ROS_DEBUG("ProcessLocalization: correct scan %.1f ms", (toc - tic).toSec() * 1e3);
+      tic = toc;
     }
 
     // add scan to buffer and assign id
@@ -2963,11 +2975,18 @@ namespace karto
           m_pGraph->TryCloseLoop(pScan, *iter);
         }
       }
+      toc = ros::WallTime::now();
+      ROS_DEBUG("ProcessLocalization: graph, loop closure %.1f ms", (toc - tic).toSec() * 1e3);
+      tic = toc;
     }
 
     m_pMapperSensorManager->SetLastScan(pScan);
-    AddScanToLocalizationBuffer(pScan, scan_vertex);
+    if (m_pUseScanMatching->GetValue()) {
+      AddScanToLocalizationBuffer(pScan, scan_vertex);
+    }
 
+    toc = ros::WallTime::now();
+    ROS_DEBUG("ProcessLocalization: end task %.1f ms", (toc - start).toSec() * 1e3);
     return true;
   }
 
@@ -3214,7 +3233,7 @@ namespace karto
 	  kt_double squaredTravelDistance = lastScannerPose.GetPosition().SquaredDistance(scannerPose.GetPosition());
 	  if (squaredTravelDistance >= math::Square(m_pMinimumTravelDistance->GetValue()) - KT_TOLERANCE)
 	  {
-		  return true;
+      return true;
 	  }
 
 	  return false;
