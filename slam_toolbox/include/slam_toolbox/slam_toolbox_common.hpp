@@ -45,6 +45,7 @@
 #include <fstream>
 #include <boost/thread.hpp>
 #include <sys/resource.h>
+#include <std_srvs/SetBool.h>
 
 namespace slam_toolbox
 {
@@ -109,10 +110,25 @@ protected:
   ros::Publisher sst_, sstm_, pose_pub_;
   ros::ServiceServer ssMap_, ssPauseMeasurements_, ssSerialize_, ssDesserialize_;
 
+  ros::ServiceServer ssEnableScanMatch_;
+  bool enableScanMatchSrvCallback(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& resp);
+
   // Storage for ROS parameters
   std::string odom_frame_, map_frame_, base_frame_, map_name_, scan_topic_;
   ros::Duration transform_timeout_, tf_buffer_dur_, minimum_time_interval_;
   int throttle_scans_;
+  
+  boost::mutex last_scan_mutex_;
+  std_msgs::Header last_scan_header_;
+  ros::Time last_scan_stamp_;
+  ros::Time map_to_odom_stamp_current_t_; //scan that used for slam
+  ros::Time map_to_odom_stamp_;
+  bool publish_tf_initialized_{false};
+  bool map_to_odom_initialized_{false};
+  // ros::Duration elapsed_from_last_tf_;
+  ros::Duration scan_update_tolerance_; //for stop update tf if scan data does not updated
+  bool map_to_odom_updated_{false};
+  bool rosbag_mode_{false};
 
   double resolution_;
   double position_covariance_scale_;

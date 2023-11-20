@@ -21,6 +21,7 @@
 
 #include "../include/slam_toolbox/toolbox_types.hpp"
 #include "ceres_utils.h"
+#include "std_msgs/Int8.h"
 
 namespace solver_plugins
 {
@@ -65,6 +66,9 @@ private:
   std::unordered_map<size_t, ceres::ResidualBlockId>* blocks_;
   std::unordered_map<int, Eigen::Vector3d>::iterator first_node_;
   boost::mutex nodes_mutex_;
+
+  //debug
+  ros::Publisher debug_pub_;
 };
 
 }

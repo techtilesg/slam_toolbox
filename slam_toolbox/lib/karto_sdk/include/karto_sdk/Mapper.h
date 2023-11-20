@@ -2073,6 +2073,11 @@ namespace karto
       m_pGraph->CorrectPoses();
     }
 
+    const LocalizationScanVertices& GetLocalizationVertices()
+    {
+      return m_LocalizationScanVertices;
+    }
+
   protected:
     void InitializeParameters();
 

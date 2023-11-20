@@ -74,7 +74,7 @@ void LoopClosureAssistant::processInteractiveFeedback(const
     return;
   }
 
-  const int id = std::stoi(feedback->marker_name, nullptr, 10) - 1;
+  const int id = std::stoi(feedback->marker_name, nullptr, 10);
 
   // was depressed, something moved, and now released
   if (feedback->event_type ==
@@ -134,115 +134,130 @@ void LoopClosureAssistant::publishGraph()
 /*****************************************************************************/
 {
   interactive_server_->clear();
-  karto::MapperGraph * graph = mapper_->GetGraph();
+  auto graph = solver_->getGraph();
 
-  if (!graph || graph->GetVertices().empty())
-  {
+  if (graph->size() == 0) {
     return;
   }
 
-  using ConstVertexMapIterator =
-      karto::MapperGraph::VertexMap::const_iterator;
-  const karto::MapperGraph::VertexMap& vertices = graph->GetVertices();
-
-  int graph_size = 0;
-  for (ConstVertexMapIterator it = vertices.begin(); it != vertices.end(); ++it)
-  {
-    graph_size += it->second.size();
-  }
-  ROS_DEBUG("Graph size: %i", graph_size);
-
+  ROS_DEBUG("Graph size: %zu", graph->size());
   bool interactive_mode = false;
   {
     boost::mutex::scoped_lock lock(interactive_mutex_);
     interactive_mode = interactive_mode_;
   }
 
-  const size_t current_marker_count = marker_array_.markers.size();
-  marker_array_.markers.clear();  // restart the marker count
+  const auto & vertices = mapper_->GetGraph()->GetVertices();
+  const auto & edges = mapper_->GetGraph()->GetEdges();
 
-  visualization_msgs::Marker vertex_marker =
-    vis_utils::toVertexMarker(map_frame_, "slam_toolbox", 0.1);
+  bool localization_marker = mapper_->getParamUseScanMatching();
+  int first_localization_id = std::numeric_limits<int>::max();
+  int localization_vertices_size = 0;
+  if (localization_marker) {
+    const auto & localization_vertices = mapper_->GetLocalizationVertices();
+    if (!localization_vertices.empty()) {
+      first_localization_id = localization_vertices.front().vertex->GetObject()->GetUniqueId();
+      localization_vertices_size = localization_vertices.size();
+    }
+  }
 
-  for (ConstVertexMapIterator outer_it = vertices.begin();
-       outer_it != vertices.end(); ++outer_it)
-  {
-    using ConstVertexMapValueIterator =
-        karto::MapperGraph::VertexMap::mapped_type::const_iterator;
-    for (ConstVertexMapValueIterator inner_it = outer_it->second.begin();
-         inner_it != outer_it->second.end(); ++inner_it)
-    {
-      karto::LocalizedRangeScan * scan = inner_it->second->GetObject();
+  visualization_msgs::MarkerArray marray;
 
-      vertex_marker.pose.position.x = scan->GetCorrectedPose().GetX();
-      vertex_marker.pose.position.y = scan->GetCorrectedPose().GetY();
+  // clear existing markers to account for any removed nodes
+  visualization_msgs::Marker clear;
+  clear.header.stamp = ros::Time::now();
+  clear.action = visualization_msgs::Marker::DELETEALL;
+  marray.markers.push_back(clear);
 
-      if (interactive_mode && enable_interactive_mode_)
-      {
-        // need a 1-to-1 mapping between marker IDs and
-        // scan unique IDs to process interactive feedback
-        vertex_marker.id = scan->GetUniqueId() + 1;
+  visualization_msgs::Marker m = vis_utils::toVertexMarker(map_frame_, "vertex", 0.1);
+
+  // add map nodes
+  for (const auto & sensor_name : vertices) {
+    for (const auto & vertex : sensor_name.second) {
+      if (localization_marker) {
+        m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
+        m.color.a = vertex.first < first_localization_id ? 0.7 : 1.0;
+        m.ns = vertex.first < first_localization_id ? "vertex" : "loc_vertex";
+      }
+      const auto & pose = vertex.second->GetObject()->GetCorrectedPose();
+      m.id = vertex.first;
+      m.pose.position.x = pose.GetX();
+      m.pose.position.y = pose.GetY();
+
+      if (interactive_mode && enable_interactive_mode_) {
         visualization_msgs::InteractiveMarker int_marker =
-          vis_utils::toInteractiveMarker(vertex_marker, 0.3);
-        interactive_server_->insert(int_marker,
-          boost::bind(
-          &LoopClosureAssistant::processInteractiveFeedback,
-          this, _1));
-      }
-      else
-      {
-        // use monotonically increasing vertex marker IDs to
-        // make room for edge marker IDs
-        vertex_marker.id = marker_array_.markers.size();
-        marker_array_.markers.push_back(vertex_marker);
+          vis_utils::toInteractiveMarker(m, 0.3);
+                interactive_server_->insert(int_marker,
+                  boost::bind(
+                  &LoopClosureAssistant::processInteractiveFeedback,
+                  this, _1));
+      } else {
+        marray.markers.push_back(m);
       }
     }
   }
 
-  if (!interactive_mode)
-  {
-    using EdgeList = std::vector<karto::Edge<karto::LocalizedRangeScan>*>;
-    using ConstEdgeListIterator = EdgeList::const_iterator;
+  // add line markers for graph edges
+  visualization_msgs::Marker edges_marker;
+  edges_marker.header.frame_id = map_frame_;
+  edges_marker.header.stamp = ros::Time::now();
+  edges_marker.id = 0;
+  edges_marker.ns = "map_edges";
+  edges_marker.action = visualization_msgs::Marker::ADD;
+  edges_marker.type = visualization_msgs::Marker::LINE_LIST;
+  edges_marker.pose.orientation.w = 1;
+  edges_marker.scale.x = 0.05;
+  edges_marker.color.b = 1;
+  edges_marker.color.a = 0.7;
+  edges_marker.lifetime = ros::Duration(0);
+  edges_marker.points.reserve(edges.size() * 2);
 
-    visualization_msgs::Marker edge_marker =
-      vis_utils::toEdgeMarker(map_frame_, "slam_toolbox", 0.05);
+  visualization_msgs::Marker localization_edges_marker;
+  if (localization_marker) {
+    localization_edges_marker.header.frame_id = map_frame_;
+    localization_edges_marker.header.stamp = ros::Time::now();
+    localization_edges_marker.id = 1;
+    localization_edges_marker.ns = "loc_edges";
+    localization_edges_marker.action = visualization_msgs::Marker::ADD;
+    localization_edges_marker.type = visualization_msgs::Marker::LINE_LIST;
+    localization_edges_marker.pose.orientation.w = 1;
+    localization_edges_marker.scale.x = 0.05;
+    localization_edges_marker.color.g = 1;
+    localization_edges_marker.color.b = 1;
+    localization_edges_marker.color.a = 1;
+    localization_edges_marker.lifetime = ros::Duration(0);
+    localization_edges_marker.points.reserve(localization_vertices_size * 3);
+  }
 
-    const EdgeList& edges = graph->GetEdges();
-    for (ConstEdgeListIterator it = edges.begin(); it != edges.end(); ++it)
-    {
-      const karto::Edge<karto::LocalizedRangeScan> * edge = *it;
-      karto::LocalizedRangeScan * source_scan = edge->GetSource()->GetObject();
-      karto::LocalizedRangeScan * target_scan = edge->GetTarget()->GetObject();
-      const karto::Pose2 source_pose = source_scan->GetCorrectedPose();
-      const karto::Pose2 target_pose = target_scan->GetCorrectedPose();
+  for (const auto & edge : edges) {
+    int source_id = edge->GetSource()->GetObject()->GetUniqueId();
+    const auto & pose0 = edge->GetSource()->GetObject()->GetCorrectedPose();
+    geometry_msgs::Point p0;
+    p0.x = pose0.GetX();
+    p0.y = pose0.GetY();
 
-      edge_marker.id = marker_array_.markers.size();
-      edge_marker.points[0].x = source_pose.GetX();
-      edge_marker.points[0].y = source_pose.GetY();
-      edge_marker.points[1].x = target_pose.GetX();
-      edge_marker.points[1].y = target_pose.GetY();
-      marker_array_.markers.push_back(edge_marker);
+    int target_id = edge->GetTarget()->GetObject()->GetUniqueId();
+    const auto & pose1 = edge->GetTarget()->GetObject()->GetCorrectedPose();
+    geometry_msgs::Point p1;
+    p1.x = pose1.GetX();
+    p1.y = pose1.GetY();
+
+    if (localization_marker && (source_id >= first_localization_id || target_id >= first_localization_id)) {
+      localization_edges_marker.points.push_back(p0);
+      localization_edges_marker.points.push_back(p1);
+    } else {
+      edges_marker.points.push_back(p0);
+      edges_marker.points.push_back(p1);
     }
   }
 
-  const size_t next_marker_count = marker_array_.markers.size();
-
-  // append preexisting markers to force deletion
-  while (marker_array_.markers.size() < current_marker_count)
-  {
-    visualization_msgs::Marker deleted_marker;
-    deleted_marker.id = marker_array_.markers.size();
-    deleted_marker.action = visualization_msgs::Marker::DELETE;
-    marker_array_.markers.push_back(deleted_marker);
-  }
+  marray.markers.push_back(edges_marker);
+  if(localization_marker)
+    marray.markers.push_back(localization_edges_marker);
 
   // if disabled, clears out old markers
   interactive_server_->applyChanges();
-  marker_publisher_.publish(marker_array_);
-
-  // drop trailing deleted markers
-  marker_array_.markers.resize(next_marker_count);
-  return;
+  marker_publisher_.publish(marray);
 }
 
 /*****************************************************************************/

@@ -117,6 +117,7 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   private_nh.param("scan_topic", scan_topic_, std::string("/scan"));
   private_nh.param("throttle_scans", throttle_scans_, 1);
   private_nh.param("enable_interactive_mode", enable_interactive_mode_, false);
+  private_nh.param("rosbag_mode", rosbag_mode_, false);
 
   double tmp_val;
   private_nh.param("transform_timeout", tmp_val, 0.2);
@@ -125,6 +126,8 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   tf_buffer_dur_ = ros::Duration(tmp_val);
   private_nh.param("minimum_time_interval", tmp_val, 0.5);
   minimum_time_interval_ = ros::Duration(tmp_val);
+  private_nh.param("scan_update_tolerance", tmp_val, 1.0);
+  scan_update_tolerance_ = ros::Duration(tmp_val);
 
   private_nh.param("position_covariance_scale", position_covariance_scale_, 1.0);
   private_nh.param("yaw_covariance_scale", yaw_covariance_scale_, 1.0);
@@ -132,8 +135,9 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   bool debug = false;
   if (private_nh.getParam("debug_logging", debug) && debug)
   {
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,
-      ros::console::levels::Debug))
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,ros::console::levels::Debug) &&
+        ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME + std::string(".message_filter"),ros::console::levels::Info) &&
+        ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME + std::string(".pluginlib"),ros::console::levels::Info))
     {
       ros::console::notifyLoggerLevelsChanged();   
     }
@@ -160,6 +164,7 @@ void SlamToolbox::setROSInterfaces(ros::NodeHandle& node)
   scan_filter_ = std::make_unique<tf2_ros::MessageFilter<sensor_msgs::LaserScan> >(*scan_filter_sub_, *tf_, odom_frame_, 5, node);
   scan_filter_->registerCallback(boost::bind(&SlamToolbox::laserCallback, this, _1));
   pose_pub_ = node.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose", 10, true);
+  ssEnableScanMatch_ = node.advertiseService("enable_scan_matching", &SlamToolbox::enableScanMatchSrvCallback, this);
 }
 
 /*****************************************************************************/
@@ -172,16 +177,54 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
   }
 
   ros::Rate r(1.0 / transform_publish_period);
+  ros::Time last_scan_stamp;
+  std_msgs::Header last_scan_header;
+  
   while(ros::ok())
   {
-    {
+    if (map_to_odom_initialized_) {
+      {
+        boost::mutex::scoped_lock lock(last_scan_mutex_);
+        last_scan_stamp = last_scan_stamp_;
+        last_scan_header = last_scan_header_;
+      }
+      ros::Time current_t = ros::Time::now();
+      ros::Duration elapsed_from_last_scan = current_t - last_scan_stamp;
       boost::mutex::scoped_lock lock(map_to_odom_mutex_);
-      geometry_msgs::TransformStamped msg;
-      tf2::convert(map_to_odom_, msg.transform);
-      msg.child_frame_id = odom_frame_;
-      msg.header.frame_id = map_frame_;
-      msg.header.stamp = ros::Time::now() + transform_timeout_;
-      tfB_->sendTransform(msg);
+      if (elapsed_from_last_scan > scan_update_tolerance_) {
+        ROS_ERROR_THROTTLE(1.0, "publishTransformLoop: scan is not updated for (%f s) with tolerance (%f s)", 
+          elapsed_from_last_scan.toSec(), scan_update_tolerance_.toSec());
+        // publish_tf_initialized_ = false; // then robot is not moving, this one is never set
+        publish_tf_initialized_ = false;
+      }
+      else {
+        if(!publish_tf_initialized_) {
+          publish_tf_initialized_ = true;
+          map_to_odom_stamp_current_t_ = last_scan_stamp;
+          map_to_odom_stamp_ = last_scan_header.stamp;
+        }
+
+        ros::Duration elapsed_from_last_tf;
+        if(map_to_odom_updated_) {
+          map_to_odom_updated_ = false;
+          elapsed_from_last_tf = ros::Duration(0.0);
+        }
+        else {
+          elapsed_from_last_tf = current_t - map_to_odom_stamp_current_t_;
+        }
+
+        geometry_msgs::TransformStamped msg;
+        tf2::convert(map_to_odom_, msg.transform);
+        msg.child_frame_id = odom_frame_;
+        msg.header.frame_id = map_frame_;
+        //TODO: why transform_timeout_ is here? forward the transform to the future!
+        // to avoid ExtrapolationExceptions from other nodes
+        if (rosbag_mode_)
+          msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf + transform_timeout_;
+        else
+          msg.header.stamp = ros::Time::now() + transform_timeout_;
+        tfB_->sendTransform(msg);
+      }
     }
     r.sleep();
   }
@@ -327,7 +370,7 @@ bool SlamToolbox::updateMap()
   vis_utils::toNavMap(occ_grid, map_.map);
 
   // publish map as current
-  map_.map.header.stamp = ros::Time::now();
+  map_.map.header.stamp = map_to_odom_stamp_;
   sst_.publish(map_.map);
   sstm_.publish(map_.map.info);
   
@@ -402,6 +445,11 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
   boost::mutex::scoped_lock lock(map_to_odom_mutex_);
   map_to_odom_ = tf2::Transform(tf2::Quaternion( odom_to_map.getRotation() ),
     tf2::Vector3( odom_to_map.getOrigin() ) ).inverse();
+  map_to_odom_stamp_ = t;
+  map_to_odom_stamp_current_t_ = last_scan_stamp_;// ros::Time::now();W
+  map_to_odom_updated_ = true;
+  map_to_odom_initialized_ = true;
+  publish_tf_initialized_ = true;
 
   return odom_to_map;
 }
@@ -445,6 +493,7 @@ bool SlamToolbox::shouldProcessScan(
   // we give it a pass on the first measurement to get the ball rolling
   if (first_measurement_)
   {
+    // ROS_INFO("shouldProcessScan:first_measurement");
     last_scan_time = scan->header.stamp;
     last_pose = pose;
     first_measurement_ = false;
@@ -454,18 +503,21 @@ bool SlamToolbox::shouldProcessScan(
   // we are in a paused mode, reject incomming information
   if(isPaused(NEW_MEASUREMENTS))
   {
+    // ROS_INFO("shouldProcessScan:isPaused");
     return false;
   }
 
   // throttled out
   if ((scan->header.seq % throttle_scans_) != 0)
   {
+    // ROS_INFO("shouldProcessScan:throttled (%d, %d)",scan->header.seq ,throttle_scans_ );
     return false;
   }
 
   // not enough time
   if (scan->header.stamp - last_scan_time < minimum_time_interval_)
   {
+    // ROS_INFO("shouldProcessScan: not enough time (%f, %f)", scan->header.stamp.toSec(), last_scan_time.toSec());
     return false;
   }
 
@@ -473,6 +525,7 @@ bool SlamToolbox::shouldProcessScan(
   const double dist2 = last_pose.SquaredDistance(pose);
   if(dist2 < 0.8 * min_dist2 || scan->header.seq < 5)
   {
+    // ROS_INFO("shouldProcessScan: check moved enough (%f, %f) %d", dist2, 0.8 * min_dist2, scan->header.seq);
     return false;
   }
 
@@ -624,6 +677,14 @@ bool SlamToolbox::pauseNewMeasurementsCallback(
   return true;
 }
 
+bool SlamToolbox::enableScanMatchSrvCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &resp)
+{
+  ROS_INFO("EnableScanMatchSrvCB: (%d)", int(req.data));
+  boost::mutex::scoped_lock lock(smapper_mutex_);
+  smapper_->getMapper()->SetUseScanMatching(req.data);
+  resp.success = true;
+  return true;
+}
 /*****************************************************************************/
 bool SlamToolbox::isPaused(const PausedApplication& app)
 /*****************************************************************************/
