@@ -45,6 +45,7 @@
 #include <fstream>
 #include <boost/thread.hpp>
 #include <sys/resource.h>
+#include <std_srvs/SetBool.h>
 
 namespace slam_toolbox
 {
@@ -108,6 +109,9 @@ protected:
   std::unique_ptr<tf2_ros::MessageFilter<sensor_msgs::LaserScan> > scan_filter_;
   ros::Publisher sst_, sstm_, pose_pub_;
   ros::ServiceServer ssMap_, ssPauseMeasurements_, ssSerialize_, ssDesserialize_;
+
+  ros::ServiceServer ssEnableScanMatch_;
+  bool enableScanMatchSrvCallback(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& resp);
 
   // Storage for ROS parameters
   std::string odom_frame_, map_frame_, base_frame_, map_name_, scan_topic_;

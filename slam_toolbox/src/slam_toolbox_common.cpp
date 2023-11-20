@@ -134,8 +134,9 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   bool debug = false;
   if (private_nh.getParam("debug_logging", debug) && debug)
   {
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,
-      ros::console::levels::Debug))
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,ros::console::levels::Debug) &&
+        ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME + std::string(".message_filter"),ros::console::levels::Info) &&
+        ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME + std::string(".pluginlib"),ros::console::levels::Info))
     {
       ros::console::notifyLoggerLevelsChanged();   
     }
@@ -162,6 +163,7 @@ void SlamToolbox::setROSInterfaces(ros::NodeHandle& node)
   scan_filter_ = std::make_unique<tf2_ros::MessageFilter<sensor_msgs::LaserScan> >(*scan_filter_sub_, *tf_, odom_frame_, 5, node);
   scan_filter_->registerCallback(boost::bind(&SlamToolbox::laserCallback, this, _1));
   pose_pub_ = node.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose", 10, true);
+  ssEnableScanMatch_ = node.advertiseService("enable_scan_matching", &SlamToolbox::enableScanMatchSrvCallback, this);
 }
 
 /*****************************************************************************/
@@ -671,6 +673,14 @@ bool SlamToolbox::pauseNewMeasurementsCallback(
   return true;
 }
 
+bool SlamToolbox::enableScanMatchSrvCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &resp)
+{
+  ROS_INFO("EnableScanMatchSrvCB: (%d)", int(req.data));
+  boost::mutex::scoped_lock lock(smapper_mutex_);
+  smapper_->getMapper()->SetUseScanMatching(req.data);
+  resp.success = true;
+  return true;
+}
 /*****************************************************************************/
 bool SlamToolbox::isPaused(const PausedApplication& app)
 /*****************************************************************************/
