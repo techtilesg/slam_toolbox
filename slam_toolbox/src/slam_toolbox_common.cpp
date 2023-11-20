@@ -117,6 +117,7 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   private_nh.param("scan_topic", scan_topic_, std::string("/scan"));
   private_nh.param("throttle_scans", throttle_scans_, 1);
   private_nh.param("enable_interactive_mode", enable_interactive_mode_, false);
+  private_nh.param("rosbag_mode", rosbag_mode_, false);
 
   double tmp_val;
   private_nh.param("transform_timeout", tmp_val, 0.2);
@@ -218,7 +219,10 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
         msg.header.frame_id = map_frame_;
         //TODO: why transform_timeout_ is here? forward the transform to the future!
         // to avoid ExtrapolationExceptions from other nodes
-        msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf + transform_timeout_;
+        if (rosbag_mode_)
+          msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf + transform_timeout_;
+        else
+          msg.header.stamp = ros::Time::now() + transform_timeout_;
         tfB_->sendTransform(msg);
       }
     }
