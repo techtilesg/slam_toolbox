@@ -118,6 +118,7 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   private_nh.param("throttle_scans", throttle_scans_, 1);
   private_nh.param("enable_interactive_mode", enable_interactive_mode_, false);
   private_nh.param("rosbag_mode", rosbag_mode_, false);
+  private_nh.param("first_map_only", first_map_only_, false);
 
   double tmp_val;
   private_nh.param("transform_timeout", tmp_val, 0.2);
@@ -249,10 +250,12 @@ void SlamToolbox::publishVisualizations()
   if(!nh_.getParam("map_update_interval", map_update_interval))
     map_update_interval = 10.0;
   ros::Rate r(1.0 / map_update_interval);
-
   while(ros::ok())
   {
-    updateMap();
+    if(!first_map_only_) {
+      //This function consumes 100% 1 core for about 1s
+      updateMap();
+    }
     if(!isPaused(VISUALIZING_GRAPH))
     {
       boost::mutex::scoped_lock lock(smapper_mutex_);

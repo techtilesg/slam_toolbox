@@ -129,6 +129,7 @@ protected:
   ros::Duration scan_update_tolerance_; //for stop update tf if scan data does not updated
   bool map_to_odom_updated_{false};
   bool rosbag_mode_{false};
+  bool first_map_only_{false};
 
   double resolution_;
   double position_covariance_scale_;
