@@ -2196,6 +2196,7 @@ namespace karto
      * Default value is 0.2 (meters).
      */
     Parameter<kt_double>* m_pMinimumTravelDistance;
+    Parameter<kt_double>* m_pMinimumTravelTime;
 
     /**
      * Sets the minimum heading change between scans. If a new scan's heading is more than minimumTravelHeading
@@ -2437,6 +2438,7 @@ namespace karto
     void setParamUseScanBarycenter(bool b);
     void setParamMinimumTimeInterval(double d);
     void setParamMinimumTravelDistance(double d);
+    void setParamMinimumTravelTime(double d);
     void setParamMinimumTravelHeading(double d);
     void setParamScanBufferSize(int i);
     void setParamScanBufferMaximumScanDistance(double d);

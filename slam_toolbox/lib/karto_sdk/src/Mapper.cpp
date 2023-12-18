@@ -2166,6 +2166,11 @@ namespace karto
         "only process scans if the robot has moved a reasonable amount.",
         0.2, GetParameterManager());
 
+    m_pMinimumTravelTime = new Parameter<kt_double>(
+        "MinimumTravelTime",
+        "new param",
+        1.0, GetParameterManager());
+
     m_pMinimumTravelHeading = new Parameter<kt_double>(
         "MinimumTravelHeading",
         "Sets the minimum heading change between scans. If a new scan's "
@@ -2506,6 +2511,11 @@ namespace karto
   void Mapper::setParamMinimumTravelDistance(double d)
   {
     m_pMinimumTravelDistance->SetValue((kt_double)d);
+  }
+
+  void Mapper::setParamMinimumTravelTime(double d)
+  {
+    m_pMinimumTravelTime->SetValue((kt_double)d);
   }
 
   void Mapper::setParamMinimumTravelHeading(double d)
@@ -3226,14 +3236,20 @@ namespace karto
 	  kt_double deltaHeading = math::NormalizeAngle(scannerPose.GetHeading() - lastScannerPose.GetHeading());
 	  if (fabs(deltaHeading) >= m_pMinimumTravelHeading->GetValue())
 	  {
-		  return true;
+      if (timeInterval >= m_pMinimumTravelTime->GetValue()) {
+       ROS_INFO("deltaHeading: timeInterval: %f", timeInterval);
+		   return true;
+      }
 	  }
 
 	  // test if we have moved enough
 	  kt_double squaredTravelDistance = lastScannerPose.GetPosition().SquaredDistance(scannerPose.GetPosition());
 	  if (squaredTravelDistance >= math::Square(m_pMinimumTravelDistance->GetValue()) - KT_TOLERANCE)
 	  {
-      return true;
+      if (timeInterval >= m_pMinimumTravelTime->GetValue()) {
+        ROS_INFO("squaredTravelDistance: timeInterval: %f", timeInterval);
+        return true;
+      }
 	  }
 
 	  return false;

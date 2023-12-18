@@ -112,6 +112,12 @@ void SMapper::configure(const ros::NodeHandle& nh)
     mapper_->setParamMinimumTravelDistance(minimum_travel_distance);
   }
 
+  double minimum_travel_time = 1.0;
+  if(nh.getParam("minimum_travel_time", minimum_travel_time))
+  {
+    mapper_->setParamMinimumTravelTime(minimum_travel_time);
+  }
+
   double minimum_travel_heading;
   if(nh.getParam("minimum_travel_heading", minimum_travel_heading))
   {
