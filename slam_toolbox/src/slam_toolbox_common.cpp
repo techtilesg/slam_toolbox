@@ -478,6 +478,7 @@ karto::LocalizedRangeScan* SlamToolbox::getLocalizedRangeScan(
     laser->GetName(), readings);
   range_scan->SetOdometricPose(transformed_pose);
   range_scan->SetCorrectedPose(transformed_pose);
+  range_scan->SetTime(scan->header.stamp.toSec());
   return range_scan;
 }
 
