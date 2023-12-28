@@ -169,7 +169,7 @@ void LoopClosureAssistant::publishGraph()
   clear.action = visualization_msgs::Marker::DELETEALL;
   marray.markers.push_back(clear);
 
-  visualization_msgs::Marker m = vis_utils::toVertexMarker(map_frame_, "vertex", 0.1);
+  visualization_msgs::Marker m = vis_utils::toVertexMarker(map_frame_, "v", 0.1);
 
   // add map nodes
   for (const auto & sensor_name : vertices) {
@@ -177,8 +177,9 @@ void LoopClosureAssistant::publishGraph()
       if (localization_marker) {
         m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
         m.color.a = vertex.first < first_localization_id ? 0.7 : 1.0;
-        m.ns = vertex.first < first_localization_id ? "vertex" : "loc_vertex";
+        m.ns = vertex.first < first_localization_id ? "v" : "lv";
       }
+      m.text = m.ns + std::to_string(vertex.first);
       const auto & pose = vertex.second->GetObject()->GetCorrectedPose();
       m.id = vertex.first;
       m.pose.position.x = pose.GetX();

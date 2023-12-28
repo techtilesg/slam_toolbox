@@ -32,7 +32,7 @@ inline visualization_msgs::Marker toVertexMarker(
   marker.header.frame_id = frame;
   marker.header.stamp = ros::Time::now();
   marker.ns = ns;
-  marker.type = visualization_msgs::Marker::SPHERE;
+  marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
   marker.pose.position.z = 0.0;
   marker.pose.orientation.w = 1.;
   marker.scale.x = scale;
