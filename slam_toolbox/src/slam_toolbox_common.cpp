@@ -117,6 +117,8 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   private_nh.param("scan_topic", scan_topic_, std::string("/scan"));
   private_nh.param("throttle_scans", throttle_scans_, 1);
   private_nh.param("enable_interactive_mode", enable_interactive_mode_, false);
+  private_nh.param("rosbag_mode", rosbag_mode_, false);
+  private_nh.param("first_map_only", first_map_only_, false);
 
   double tmp_val;
   private_nh.param("transform_timeout", tmp_val, 0.2);
@@ -134,8 +136,9 @@ void SlamToolbox::setParams(ros::NodeHandle& private_nh)
   bool debug = false;
   if (private_nh.getParam("debug_logging", debug) && debug)
   {
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,
-      ros::console::levels::Debug))
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,ros::console::levels::Debug) &&
+        ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME + std::string(".message_filter"),ros::console::levels::Info) &&
+        ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME + std::string(".pluginlib"),ros::console::levels::Info))
     {
       ros::console::notifyLoggerLevelsChanged();   
     }
@@ -162,6 +165,7 @@ void SlamToolbox::setROSInterfaces(ros::NodeHandle& node)
   scan_filter_ = std::make_unique<tf2_ros::MessageFilter<sensor_msgs::LaserScan> >(*scan_filter_sub_, *tf_, odom_frame_, 5, node);
   scan_filter_->registerCallback(boost::bind(&SlamToolbox::laserCallback, this, _1));
   pose_pub_ = node.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose", 10, true);
+  ssEnableScanMatch_ = node.advertiseService("enable_scan_matching", &SlamToolbox::enableScanMatchSrvCallback, this);
 }
 
 /*****************************************************************************/
@@ -179,7 +183,7 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
   
   while(ros::ok())
   {
-    if (publish_tf_initialized_) {
+    if (map_to_odom_initialized_) {
       {
         boost::mutex::scoped_lock lock(last_scan_mutex_);
         last_scan_stamp = last_scan_stamp_;
@@ -192,10 +196,15 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
         ROS_ERROR_THROTTLE(1.0, "publishTransformLoop: scan is not updated for (%f s) with tolerance (%f s)", 
           elapsed_from_last_scan.toSec(), scan_update_tolerance_.toSec());
         // publish_tf_initialized_ = false; // then robot is not moving, this one is never set
-        map_to_odom_stamp_current_t_ = last_scan_stamp;
-        map_to_odom_stamp_ = last_scan_header.stamp;
+        publish_tf_initialized_ = false;
       }
       else {
+        if(!publish_tf_initialized_) {
+          publish_tf_initialized_ = true;
+          map_to_odom_stamp_current_t_ = last_scan_stamp;
+          map_to_odom_stamp_ = last_scan_header.stamp;
+        }
+
         ros::Duration elapsed_from_last_tf;
         if(map_to_odom_updated_) {
           map_to_odom_updated_ = false;
@@ -211,7 +220,10 @@ void SlamToolbox::publishTransformLoop(const double& transform_publish_period)
         msg.header.frame_id = map_frame_;
         //TODO: why transform_timeout_ is here? forward the transform to the future!
         // to avoid ExtrapolationExceptions from other nodes
-        msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf + transform_timeout_;
+        if (rosbag_mode_)
+          msg.header.stamp = map_to_odom_stamp_ + elapsed_from_last_tf + transform_timeout_;
+        else
+          msg.header.stamp = ros::Time::now() + transform_timeout_;
         tfB_->sendTransform(msg);
       }
     }
@@ -238,10 +250,12 @@ void SlamToolbox::publishVisualizations()
   if(!nh_.getParam("map_update_interval", map_update_interval))
     map_update_interval = 10.0;
   ros::Rate r(1.0 / map_update_interval);
-
   while(ros::ok())
   {
-    updateMap();
+    if(!first_map_only_) {
+      //This function consumes 100% 1 core for about 1s
+      updateMap();
+    }
     if(!isPaused(VISUALIZING_GRAPH))
     {
       boost::mutex::scoped_lock lock(smapper_mutex_);
@@ -437,6 +451,7 @@ tf2::Stamped<tf2::Transform> SlamToolbox::setTransformFromPoses(
   map_to_odom_stamp_ = t;
   map_to_odom_stamp_current_t_ = last_scan_stamp_;// ros::Time::now();W
   map_to_odom_updated_ = true;
+  map_to_odom_initialized_ = true;
   publish_tf_initialized_ = true;
 
   return odom_to_map;
@@ -463,6 +478,7 @@ karto::LocalizedRangeScan* SlamToolbox::getLocalizedRangeScan(
     laser->GetName(), readings);
   range_scan->SetOdometricPose(transformed_pose);
   range_scan->SetCorrectedPose(transformed_pose);
+  range_scan->SetTime(scan->header.stamp.toSec());
   return range_scan;
 }
 
@@ -665,6 +681,14 @@ bool SlamToolbox::pauseNewMeasurementsCallback(
   return true;
 }
 
+bool SlamToolbox::enableScanMatchSrvCallback(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &resp)
+{
+  ROS_INFO("EnableScanMatchSrvCB: (%d)", int(req.data));
+  boost::mutex::scoped_lock lock(smapper_mutex_);
+  smapper_->getMapper()->SetUseScanMatching(req.data);
+  resp.success = true;
+  return true;
+}
 /*****************************************************************************/
 bool SlamToolbox::isPaused(const PausedApplication& app)
 /*****************************************************************************/

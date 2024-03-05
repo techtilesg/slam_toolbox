@@ -141,6 +141,7 @@ LocalizedRangeScan* LocalizationSlamToolbox::addScan(
   Pose2& karto_pose)
 /*****************************************************************************/
 {
+  ros::WallTime start = ros::WallTime::now();
   boost::mutex::scoped_lock l(pose_mutex_);
 
   if (processor_type_ == PROCESS_LOCALIZATION && process_near_pose_)
@@ -176,11 +177,16 @@ LocalizedRangeScan* LocalizationSlamToolbox::addScan(
     // reset to localization mode
     processor_type_ = PROCESS_LOCALIZATION;
     update_reprocessing_transform = true;
+
+    double dur = (ros::WallTime::now() - start).toSec() * 1e3;
+    ROS_DEBUG("ProcessAgainstNodesNearBy: %.1f ms", dur);
   }
   else if (processor_type_ == PROCESS_LOCALIZATION)
   {
     processed = smapper_->getMapper()->ProcessLocalization(range_scan,  &covariance);
     update_reprocessing_transform = false;
+    double dur = (ros::WallTime::now() - start).toSec() * 1e3;
+    ROS_DEBUG("addScan: ProcessLocalization: %.1f ms", dur);
   }
   else
   {
@@ -201,6 +207,8 @@ LocalizedRangeScan* LocalizationSlamToolbox::addScan(
 
     publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);
   }
+  double dur = (ros::WallTime::now() - start).toSec() * 1e3;
+  ROS_DEBUG("addScan: end %.1f ms", dur);
 
   return range_scan;
 }

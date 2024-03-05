@@ -24,16 +24,14 @@ CeresSolver::CeresSolver() :
 {
   ros::NodeHandle nh("~");
   std::string solver_type, preconditioner_type, dogleg_type,
-    trust_strategy, loss_fn, mode;
+    trust_strategy, loss_fn;
   nh.getParam("ceres_linear_solver", solver_type);
   nh.getParam("ceres_preconditioner", preconditioner_type);
   nh.getParam("ceres_dogleg_type", dogleg_type);
   nh.getParam("ceres_trust_strategy", trust_strategy);
   nh.getParam("ceres_loss_function", loss_fn);
-  nh.getParam("mode", mode);
+  nh.getParam("mode", mode_);
   nh.getParam("debug_logging", debug_logging_);
-
-  debug_pub_ = nh.advertise<std_msgs::Int8>("debug", 10);
 
   corrections_.clear();
   first_node_ = nodes_->end();
@@ -139,7 +137,7 @@ CeresSolver::CeresSolver() :
     options_.dynamic_sparsity = true;
   }
 
-  if (mode == std::string("localization"))
+  if (mode_ == std::string("localization"))
   {
     // doubles the memory footprint, but lets us remove contraints faster
     options_problem_.enable_fast_removal = true;
@@ -184,12 +182,26 @@ void CeresSolver::Compute()
   // populate contraint for static initial pose
   if (!was_constant_set_ && first_node_ != nodes_->end())
   {
-    ROS_DEBUG("CeresSolver: Setting first node as a constant pose:"
-      "%0.2f, %0.2f, %0.2f.", first_node_->second(0),
-      first_node_->second(1), first_node_->second(2));
-    problem_->SetParameterBlockConstant(&first_node_->second(0));
-    problem_->SetParameterBlockConstant(&first_node_->second(1));
-    problem_->SetParameterBlockConstant(&first_node_->second(2));
+    if (mode_ == std::string("localization"))
+    {
+      ROS_DEBUG("CeresSolver: localization mode, setting all nodes as constant poses");
+      GraphIterator iter = nodes_->begin();
+      for ( iter; iter != nodes_->end(); ++iter )
+      {
+        problem_->SetParameterBlockConstant(&iter->second(0));
+        problem_->SetParameterBlockConstant(&iter->second(1));
+        problem_->SetParameterBlockConstant(&iter->second(2));
+      }
+    }
+    else
+    {
+      ROS_DEBUG("CeresSolver: Setting first node as a constant pose:"
+        "%0.4f, %0.4f, %0.4f.", first_node_->second(0),
+        first_node_->second(1), first_node_->second(2));
+      problem_->SetParameterBlockConstant(&first_node_->second(0));
+      problem_->SetParameterBlockConstant(&first_node_->second(1));
+      problem_->SetParameterBlockConstant(&first_node_->second(2));
+    }
     was_constant_set_ = !was_constant_set_;
   }
 
@@ -198,16 +210,14 @@ void CeresSolver::Compute()
   ceres::Solve(options_, problem_, &summary);
   if (debug_logging_)
   {
-    std::cout << summary.FullReport() << '\n';
+    // std::cout << summary.FullReport() << '\n';
+    ROS_DEBUG_STREAM("CeresSolver: " << summary.FullReport());
   }
 
   if (!summary.IsSolutionUsable())
   {
     ROS_WARN("CeresSolver: "
       "Ceres could not find a usable solution to optimize.");
-    std_msgs::Int8 debug_msg;
-    debug_msg.data = 1;
-    debug_pub_.publish(debug_msg);
     return;
   }
 
@@ -364,6 +374,14 @@ void CeresSolver::RemoveNode(kt_int32s id)
   GraphIterator nodeit = nodes_->find(id);
   if (nodeit != nodes_->end())
   {
+    if(problem_->HasParameterBlock(&nodeit->second(0)) &&
+       problem_->HasParameterBlock(&nodeit->second(1)) &&
+       problem_->HasParameterBlock(&nodeit->second(2))) {
+      problem_->RemoveParameterBlock(&nodeit->second(0));
+      problem_->RemoveParameterBlock(&nodeit->second(1));
+      problem_->RemoveParameterBlock(&nodeit->second(2));
+      ROS_DEBUG("RemoveNode: remove node id %d", nodeit->first);
+    }
     nodes_->erase(nodeit);
   }
   else

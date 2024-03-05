@@ -149,11 +149,16 @@ void LoopClosureAssistant::publishGraph()
 
   const auto & vertices = mapper_->GetGraph()->GetVertices();
   const auto & edges = mapper_->GetGraph()->GetEdges();
-  const auto & localization_vertices = mapper_->GetLocalizationVertices();
 
+  bool localization_marker = mapper_->getParamUseScanMatching();
   int first_localization_id = std::numeric_limits<int>::max();
-  if (!localization_vertices.empty()) {
-    first_localization_id = localization_vertices.front().vertex->GetObject()->GetUniqueId();
+  int localization_vertices_size = 0;
+  if (localization_marker) {
+    const auto & localization_vertices = mapper_->GetLocalizationVertices();
+    if (!localization_vertices.empty()) {
+      first_localization_id = localization_vertices.front().vertex->GetObject()->GetUniqueId();
+      localization_vertices_size = localization_vertices.size();
+    }
   }
 
   visualization_msgs::MarkerArray marray;
@@ -164,13 +169,17 @@ void LoopClosureAssistant::publishGraph()
   clear.action = visualization_msgs::Marker::DELETEALL;
   marray.markers.push_back(clear);
 
-  visualization_msgs::Marker m = vis_utils::toVertexMarker(map_frame_, "slam_toolbox", 0.1);
+  visualization_msgs::Marker m = vis_utils::toVertexMarker(map_frame_, "v", 0.1);
 
   // add map nodes
   for (const auto & sensor_name : vertices) {
     for (const auto & vertex : sensor_name.second) {
-      m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
-      m.color.a = vertex.first < first_localization_id ? 0.7 : 1.0;
+      if (localization_marker) {
+        m.color.g = vertex.first < first_localization_id ? 0.0 : 1.0;
+        m.color.a = vertex.first < first_localization_id ? 0.7 : 1.0;
+        m.ns = vertex.first < first_localization_id ? "v" : "lv";
+      }
+      m.text = m.ns + std::to_string(vertex.first);
       const auto & pose = vertex.second->GetObject()->GetCorrectedPose();
       m.id = vertex.first;
       m.pose.position.x = pose.GetX();
@@ -194,7 +203,7 @@ void LoopClosureAssistant::publishGraph()
   edges_marker.header.frame_id = map_frame_;
   edges_marker.header.stamp = ros::Time::now();
   edges_marker.id = 0;
-  edges_marker.ns = "slam_toolbox_edges";
+  edges_marker.ns = "map_edges";
   edges_marker.action = visualization_msgs::Marker::ADD;
   edges_marker.type = visualization_msgs::Marker::LINE_LIST;
   edges_marker.pose.orientation.w = 1;
@@ -205,19 +214,21 @@ void LoopClosureAssistant::publishGraph()
   edges_marker.points.reserve(edges.size() * 2);
 
   visualization_msgs::Marker localization_edges_marker;
-  localization_edges_marker.header.frame_id = map_frame_;
-  localization_edges_marker.header.stamp = ros::Time::now();
-  localization_edges_marker.id = 1;
-  localization_edges_marker.ns = "slam_toolbox_edges";
-  localization_edges_marker.action = visualization_msgs::Marker::ADD;
-  localization_edges_marker.type = visualization_msgs::Marker::LINE_LIST;
-  localization_edges_marker.pose.orientation.w = 1;
-  localization_edges_marker.scale.x = 0.05;
-  localization_edges_marker.color.g = 1;
-  localization_edges_marker.color.b = 1;
-  localization_edges_marker.color.a = 1;
-  localization_edges_marker.lifetime = ros::Duration(0);
-  localization_edges_marker.points.reserve(localization_vertices.size() * 3);
+  if (localization_marker) {
+    localization_edges_marker.header.frame_id = map_frame_;
+    localization_edges_marker.header.stamp = ros::Time::now();
+    localization_edges_marker.id = 1;
+    localization_edges_marker.ns = "loc_edges";
+    localization_edges_marker.action = visualization_msgs::Marker::ADD;
+    localization_edges_marker.type = visualization_msgs::Marker::LINE_LIST;
+    localization_edges_marker.pose.orientation.w = 1;
+    localization_edges_marker.scale.x = 0.05;
+    localization_edges_marker.color.g = 1;
+    localization_edges_marker.color.b = 1;
+    localization_edges_marker.color.a = 1;
+    localization_edges_marker.lifetime = ros::Duration(0);
+    localization_edges_marker.points.reserve(localization_vertices_size * 3);
+  }
 
   for (const auto & edge : edges) {
     int source_id = edge->GetSource()->GetObject()->GetUniqueId();
@@ -232,7 +243,7 @@ void LoopClosureAssistant::publishGraph()
     p1.x = pose1.GetX();
     p1.y = pose1.GetY();
 
-    if (source_id >= first_localization_id || target_id >= first_localization_id) {
+    if (localization_marker && (source_id >= first_localization_id || target_id >= first_localization_id)) {
       localization_edges_marker.points.push_back(p0);
       localization_edges_marker.points.push_back(p1);
     } else {
@@ -242,7 +253,8 @@ void LoopClosureAssistant::publishGraph()
   }
 
   marray.markers.push_back(edges_marker);
-  marray.markers.push_back(localization_edges_marker);
+  if(localization_marker)
+    marray.markers.push_back(localization_edges_marker);
 
   // if disabled, clears out old markers
   interactive_server_->applyChanges();
