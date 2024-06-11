@@ -77,7 +77,9 @@ protected:
     slam_toolbox_msgs::SerializePoseGraph::Response& resp);
   virtual bool deserializePoseGraphCallback(slam_toolbox_msgs::DeserializePoseGraph::Request& req,
     slam_toolbox_msgs::DeserializePoseGraph::Response& resp);
-  void loadSerializedPoseGraph(std::unique_ptr<karto::Mapper>&, std::unique_ptr<karto::Dataset>&);
+  void loadSerializedPoseGraph(std::unique_ptr<karto::Mapper>&,
+                               std::unique_ptr<karto::Dataset>&,
+                               sensor_msgs::LaserScan &);
   void loadPoseGraphByParams(ros::NodeHandle& nh);
 
   // functional bits
@@ -135,6 +137,7 @@ protected:
   double position_covariance_scale_;
   double yaw_covariance_scale_;
   bool first_measurement_, enable_interactive_mode_;
+  bool map_editor_mode_{false};
 
   // Book keeping
   std::unique_ptr<mapper_utils::SMapper> smapper_;

@@ -716,9 +716,9 @@ bool SlamToolbox::serializePoseGraphCallback(
 }
 
 /*****************************************************************************/
-void SlamToolbox::loadSerializedPoseGraph(
-  std::unique_ptr<karto::Mapper>& mapper,
-  std::unique_ptr<karto::Dataset>& dataset)
+void SlamToolbox::loadSerializedPoseGraph(std::unique_ptr<karto::Mapper>& mapper,
+  std::unique_ptr<karto::Dataset>& dataset,
+  sensor_msgs::LaserScan &msg)
 /*****************************************************************************/
 {
   boost::mutex::scoped_lock lock(smapper_mutex_);
@@ -781,7 +781,7 @@ void SlamToolbox::loadSerializedPoseGraph(
   if (pSensor)
   {
     karto::SensorManager::GetInstance()->RegisterSensor(pSensor);
-
+    if(empty(msg.header.frame_id)) {
     while (ros::ok())
     {
       ROS_INFO("Waiting for incoming scan to get metadata...");
@@ -804,6 +804,11 @@ void SlamToolbox::loadSerializedPoseGraph(
           exit(-1);
         }
       }
+    }
+    }
+    else {
+      lasers_[msg.header.frame_id] =
+          laser_assistant_->toLaserMetadata(msg);
     }
   }
   else
@@ -855,8 +860,8 @@ bool SlamToolbox::deserializePoseGraphCallback(
   ROS_DEBUG("DeserializePoseGraph: Successfully read file.");
 
   //load data to the scanholder for interraction mode
+      sensor_msgs::LaserScan msg;
   if(enable_interactive_mode_) {
-    sensor_msgs::LaserScan msg;
     karto::LaserRangeFinder* scan_info = dataset->GetLasers().at(0); //
     msg.angle_increment = scan_info->GetAngularResolution();
     msg.angle_max = scan_info->GetMaximumAngle();
@@ -895,7 +900,10 @@ bool SlamToolbox::deserializePoseGraphCallback(
       }
     }
   }
-  loadSerializedPoseGraph(mapper, dataset);
+  if (map_editor_mode_) {
+    msg.header.frame_id = base_frame_;
+  }
+  loadSerializedPoseGraph(mapper, dataset, msg);
   updateMap();
 
   first_measurement_ = true;

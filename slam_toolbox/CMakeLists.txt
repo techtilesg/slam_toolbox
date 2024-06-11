@@ -118,6 +118,11 @@ target_link_libraries(lifelong_slam_toolbox toolbox_common kartoSlamToolbox ${ca
 add_executable(lifelong_slam_toolbox_node src/experimental/slam_toolbox_lifelong_node.cpp )
 target_link_libraries(lifelong_slam_toolbox_node lifelong_slam_toolbox)
 
+add_library(map_editor_server src/map_editor_server.cpp)
+target_link_libraries(map_editor_server toolbox_common kartoSlamToolbox ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+add_executable(map_editor_server_node src/map_editor_server_node.cpp )
+target_link_libraries(map_editor_server_node map_editor_server)
+
 #### Merging maps tool
 add_executable(merge_maps_kinematic src/merge_maps_kinematic.cpp)
 target_link_libraries(merge_maps_kinematic toolbox_common)
