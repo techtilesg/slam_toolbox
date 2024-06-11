@@ -323,19 +323,19 @@ bool SlamToolbox::shouldStartWithPoseGraph(std::string& filename,
             nh_.getParam("start_pose_map_frame", sMap_frame) &&
             nh_.getParam("start_pose_base_frame", sBase_frame)) {
           geometry_msgs::TransformStamped mapF_to_sMapF_msg, sBase_to_base_msg;
-          try {
-            mapF_to_sMapF_msg = tf_->lookupTransform(map_frame_, sMap_frame, ros::Time(), ros::Duration(5.0));
-            sBase_to_base_msg = tf_->lookupTransform(sBase_frame, base_frame_, ros::Time(), ros::Duration(5.0));
-          }
-          catch(tf2::TransformException& e)
-          {
-            ROS_ERROR("Setting start pose failed (%s -> %s), (%s -> %s): %s",
-                      map_frame_.c_str(), sMap_frame.c_str(),
-                      base_frame_.c_str(), sBase_frame.c_str(), e.what());
-            pose.x = 0.;
-            pose.y = 0.;
-            pose.theta = 0.;
-            return true;
+          while (ros::ok()) {
+            try {
+              mapF_to_sMapF_msg = tf_->lookupTransform(map_frame_, sMap_frame, ros::Time(), ros::Duration(5.0));
+              sBase_to_base_msg = tf_->lookupTransform(sBase_frame, base_frame_, ros::Time(), ros::Duration(5.0));
+            }
+            catch(tf2::TransformException& e)
+            {
+              ROS_ERROR("Setting start pose failed (%s -> %s), (%s -> %s): %s. Try again!",
+                        map_frame_.c_str(), sMap_frame.c_str(),
+                        base_frame_.c_str(), sBase_frame.c_str(), e.what());
+              continue;
+            }
+            break;
           }
           tf2::Transform tf_mapF_sMapF, tf_sBaseF_baseF, tf_sMap_sBaseF, tf_mapF_baseF;
           tf2::Quaternion q;
