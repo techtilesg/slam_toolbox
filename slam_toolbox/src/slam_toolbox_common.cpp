@@ -315,9 +315,50 @@ bool SlamToolbox::shouldStartWithPoseGraph(std::string& filename,
       }
       else
       {
-        pose.x = read_pose[0];
-        pose.y = read_pose[1];
-        pose.theta = read_pose[2];
+        // allow to set the start pose at different frames
+        std::string sMap_frame, sBase_frame;
+        bool different_start_pose_frames = false;
+        nh_.getParam("different_start_pose_frames", different_start_pose_frames);
+        if (different_start_pose_frames &&
+            nh_.getParam("start_pose_map_frame", sMap_frame) &&
+            nh_.getParam("start_pose_base_frame", sBase_frame)) {
+          geometry_msgs::TransformStamped mapF_to_sMapF_msg, sBase_to_base_msg;
+          try {
+            mapF_to_sMapF_msg = tf_->lookupTransform(map_frame_, sMap_frame, ros::Time(), ros::Duration(5.0));
+            sBase_to_base_msg = tf_->lookupTransform(sBase_frame, base_frame_, ros::Time(), ros::Duration(5.0));
+          }
+          catch(tf2::TransformException& e)
+          {
+            ROS_ERROR("Setting start pose failed (%s -> %s), (%s -> %s): %s",
+                      map_frame_.c_str(), sMap_frame.c_str(),
+                      base_frame_.c_str(), sBase_frame.c_str(), e.what());
+            pose.x = 0.;
+            pose.y = 0.;
+            pose.theta = 0.;
+            return true;
+          }
+          tf2::Transform tf_mapF_sMapF, tf_sBaseF_baseF, tf_sMap_sBaseF, tf_mapF_baseF;
+          tf2::Quaternion q;
+          q.setRPY(0., 0., read_pose[2]);
+          tf_sMap_sBaseF.setRotation(q);
+          tf_sMap_sBaseF.setOrigin(tf2::Vector3(read_pose[0], read_pose[1], 0));
+          tf2::fromMsg(mapF_to_sMapF_msg.transform, tf_mapF_sMapF);
+          tf2::fromMsg(sBase_to_base_msg.transform, tf_sBaseF_baseF);
+          tf_mapF_baseF = tf_mapF_sMapF*tf_sMap_sBaseF*tf_sBaseF_baseF;
+          pose.x = tf_mapF_baseF.getOrigin().x();
+          pose.y = tf_mapF_baseF.getOrigin().y();
+          double roll, pitch, yaw;
+          tf_mapF_baseF.getBasis().getRPY(roll, pitch, yaw);
+          pose.theta = yaw;
+          ROS_INFO("Transform the starting pose from (%f, %f, %f, %s -> %s) to (%f, %f, %f, %s -> %s)",
+                   read_pose[0], read_pose[1], read_pose[2], sMap_frame.c_str(), sBase_frame.c_str(),
+                   pose.x, pose.y, pose.theta, map_frame_.c_str(), base_frame_.c_str());
+        }
+        else {
+          pose.x = read_pose[0];
+          pose.y = read_pose[1];
+          pose.theta = read_pose[2];
+        }
       }
     }
     else
